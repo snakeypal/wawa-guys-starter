@@ -1,16 +1,67 @@
+import { openDiscordInviteDialog } from "playroomkit";
 import { useAudioManager } from "../hooks/useAudioManager";
+import { useGameState } from "../hooks/useGameState";
 
 export const UI = () => {
   const { audioEnabled, setAudioEnabled } = useAudioManager();
+  const { timer, startGame, host, stage, players } = useGameState();
 
   return (
     <main
-      className={`fixed z-10 inset-0 pointer-events-none grid place-content-center`}
+      className={`fixed z-10 inset-0 pointer-events-none grid place-content-center
+      ${
+        stage === "lobby" ? "bg-black/40" : "bg-transparent"
+      } transition-colors duration-1000`}
     >
-      <h2 className="absolute right-4 top-4 text-5xl text-white font-black">
-        0
-      </h2>
+      <div className="absolute top-28 left-4 md:top-4 md:-translate-x-1/2 md:left-1/2 flex flex-col md:flex-row gap-4">
+        {players.map((p) => (
+          <div key={p.state.id} className="flex flex-col items-center">
+            <img
+              className={`w-12 h-12 rounded-full ${
+                p.state.getState("dead") ? "filter grayscale" : ""
+              }`}
+              src={p.state.state.profile.photo}
+            />
+            <p className="text-white max-w-20 truncate">
+              {p.state.state.profile.name}
+            </p>
+          </div>
+        ))}
+      </div>
+      {timer >= 0 && (
+        <h2 className="absolute right-4 top-4 text-5xl text-white font-black">
+          {timer}
+        </h2>
+      )}
       <img src="images/logo.png" className="absolute top-4 left-4 w-28" />
+      {stage === "lobby" && (
+        <>
+          {host ? (
+            <button
+              className="pointer-events-auto 
+              bg-gradient-to-br from-orange-500 to-yellow-500 
+              hover:opacity-80 transition-all duration-200 
+              px-12 py-4 rounded-lg font-black text-xl text-white drop-shadow-lg"
+              onClick={startGame}
+            >
+              START
+            </button>
+          ) : (
+            <p className="italic text-white">
+              Waiting for the host to start the game...
+            </p>
+          )}
+          <button
+            className="mt-4 pointer-events-auto 
+            bg-gradient-to-br from-orange-500 to-yellow-500 
+            hover:opacity-80 transition-all duration-200 
+            px-12 py-4 rounded-lg font-black text-xl text-white drop-shadow-lg"
+            onClick={openDiscordInviteDialog}
+          >
+            INVITE
+          </button>
+        </>
+      )}
 
       <button
         className="absolute top-1/2 right-4 -translate-y-1/2 pointer-events-auto"
