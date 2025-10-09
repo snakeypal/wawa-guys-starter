@@ -1,13 +1,31 @@
-import { RPC } from "playroomkit";
-import { useState, useMemo } from "react";
+// src/components/GameArena.jsx
+import { RPC, isHost } from "playroomkit";
+import { useState, useMemo, Fragment, useRef, useEffect } from "react";
+import { Vector3 } from "three";
+import { useGameState } from "../hooks/useGameState";
 import { Hexagon } from "./Hexagon";
-import { RigidBody } from "@react-three/rapier";
-import { TreasureChest } from "./TreasureChest"; // import the chest component
+import { TreasureChest } from "./TreasureChest";
+
+export const HEX_X_SPACING = 2.25;
+export const HEX_Z_SPACING = 1.95;
+export const NB_ROWS = 7;
+export const NB_COLUMNS = 7;
+export const FLOOR_HEIGHT = 10;
+export const FLOORS = [
+  { color: "red" },
+  { color: "blue" },
+  { color: "green" },
+  { color: "yellow" },
+  { color: "purple" },
+];
 
 export const GameArena = () => {
   const [hexagonHit, setHexagonHit] = useState({});
-  const [visitedTiles, setVisitedTiles] = useState({});
+  const { setTreasureWorldPos } = useGameState();
+  const host = isHost();
+  const groupRef = useRef();
 
+  // Random special tiles for each floor
   const specialTiles = useMemo(() => {
     return FLOORS.map(() => {
       const rowIndex = Math.floor(Math.random() * NB_ROWS);
@@ -16,6 +34,32 @@ export const GameArena = () => {
     });
   }, []);
 
+  // Random TreasureChest position only on the LAST floor
+  const treasurePosition = useMemo(() => {
+    const rowIndex = Math.floor(Math.random() * NB_ROWS);
+    const colIndex = Math.floor(Math.random() * NB_COLUMNS);
+    return { rowIndex, colIndex };
+  }, []);
+
+  useEffect(() => {
+    if (host && groupRef.current) {
+      const isLastFloor = FLOORS.length - 1;
+      const { rowIndex, colIndex } = treasurePosition;
+
+      // Calculate local position
+      const localPos = new Vector3(
+        colIndex * HEX_X_SPACING + (rowIndex % 2 ? HEX_X_SPACING / 2 : 0),
+        isLastFloor * -FLOOR_HEIGHT + 1.5, // 1.5 is the chest's height offset
+        rowIndex * HEX_Z_SPACING
+      );
+
+      // Convert to world position
+      groupRef.current.updateMatrixWorld();
+      const worldPos = groupRef.current.localToWorld(localPos);
+      setTreasureWorldPos(worldPos);
+    }
+  }, [host, treasurePosition, setTreasureWorldPos]);
+
   RPC.register("hexagonHit", (data) => {
     setHexagonHit((prev) => ({
       ...prev,
@@ -23,73 +67,56 @@ export const GameArena = () => {
     }));
   });
 
-  const wallHeight = (FLOORS.length - 1) * FLOOR_HEIGHT + 5;
-  const wallYPosition = -((FLOORS.length - 1) * FLOOR_HEIGHT) / 2;
-
-  const gridWidth = (NB_COLUMNS - 1) * HEX_X_SPACING + HEX_X_SPACING / 2;
-  const gridDepth = (NB_ROWS - 1) * HEX_Z_SPACING;
-  const gridCenterX = gridWidth / 2;
-  const gridCenterZ = gridDepth / 2;
-
   return (
     <group
+      ref={groupRef}
       position-x={-((NB_COLUMNS - 1) / 2) * HEX_X_SPACING}
       position-z={-((NB_ROWS - 1) / 2) * HEX_Z_SPACING}
     >
-      {/* HEXAGONS */}
       {FLOORS.map((floor, floorIndex) => (
         <group key={floorIndex} position-y={floorIndex * -FLOOR_HEIGHT}>
           {[...Array(NB_ROWS)].map((_, rowIndex) => (
-            <group
-              key={rowIndex}
-              position-z={rowIndex * HEX_Z_SPACING}
-              position-x={rowIndex % 2 ? HEX_X_SPACING / 2 : 0}
-            >
+            <group key={rowIndex} position-z={rowIndex * HEX_Z_SPACING} position-x={rowIndex % 2 ? HEX_X_SPACING / 2 : 0}>
               {[...Array(NB_COLUMNS)].map((_, columnIndex) => {
                 const hexagonKey = `${floorIndex}-${rowIndex}-${columnIndex}`;
+                const isLastFloor = floorIndex === FLOORS.length - 1;
                 const isSpecial =
+                  !isLastFloor &&
                   specialTiles[floorIndex].rowIndex === rowIndex &&
                   specialTiles[floorIndex].colIndex === columnIndex;
+                const isTreasure =
+                  isLastFloor &&
+                  treasurePosition.rowIndex === rowIndex &&
+                  treasurePosition.colIndex === columnIndex;
+
                 return (
-                  <Hexagon
-                    key={columnIndex}
-                    position-x={columnIndex * HEX_X_SPACING}
-                    color={
-                      visitedTiles[hexagonKey] ? "white" : floor.color
-                    }
-                    onHit={() => {
-                      setVisitedTiles((prev) => ({
-                        ...prev,
-                        [hexagonKey]: true,
-                      }));
-                      if (isSpecial) {
-                        setHexagonHit((prev) => ({
-                          ...prev,
-                          [hexagonKey]: true,
-                        }));
-                        RPC.call("hexagonHit", { hexagonKey }, RPC.Mode.ALL);
-                      }
-                    }}
-                    hit={hexagonHit[hexagonKey]}
-                  />
+                  <Fragment key={hexagonKey}>
+                    <Hexagon
+                      isSpecial={isSpecial}
+                      position-x={columnIndex * HEX_X_SPACING}
+                      color={floor.color} // Simplified color logic
+                      // =======================================================
+                      // FIX: Restored onHit logic to trigger falls
+                      // =======================================================
+                      onHit={() => {
+                        if (isSpecial) {
+                          setHexagonHit((prev) => ({...prev, [hexagonKey]: true,}));
+                          RPC.call("hexagonHit", { hexagonKey }, RPC.Mode.ALL);
+                        }
+                      }}
+                      hit={hexagonHit[hexagonKey]} // Pass the hit state down
+                      // =======================================================
+                    />
+                    {isTreasure && (
+                      <TreasureChest position-x={columnIndex * HEX_X_SPACING} position-y={1.5} scale={[0.1, 0.1, 0.1]} />
+                    )}
+                  </Fragment>
                 );
               })}
             </group>
           ))}
         </group>
       ))}
-
-      {/* INVISIBLE WALLS (colliders only) */}
-      <RigidBody type="fixed" colliders="cuboid" position={[gridCenterX, wallYPosition, gridDepth + 1]} />
-      <RigidBody type="fixed" colliders="cuboid" position={[gridCenterX, wallYPosition, -1]} />
-      <RigidBody type="fixed" colliders="cuboid" position={[gridWidth + 1, wallYPosition, gridCenterZ]} />
-      <RigidBody type="fixed" colliders="cuboid" position={[-1, wallYPosition, gridCenterZ]} />
-
-      {/* Place the chest at the bottom (last) floor */}
-      <TreasureChest
-        position={[gridCenterX, -FLOOR_HEIGHT * (FLOORS.length - 1), gridCenterZ]}
-        scale={[1, 1, 1]}
-      />
     </group>
   );
 };

@@ -14,6 +14,8 @@ export const Controls = {
   left: "left",
   right: "right",
   jump: "jump",
+  boost: "boost",
+  respawn: "respawn",
 };
 
 function App(){
@@ -24,6 +26,8 @@ function App(){
       { name: Controls.left, keys: ["ArrowLeft","KeyA"] },
       { name: Controls.right, keys: ["ArrowRight","KeyD"] },
       { name: Controls.jump, keys: ["Space"] },
+      { name: Controls.boost, keys: ["ShiftLeft"] },
+      { name: Controls.respawn, keys: ["KeyQ"] }, 
     ],
     []
   );
