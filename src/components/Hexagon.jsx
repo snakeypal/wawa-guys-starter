@@ -1,18 +1,17 @@
 // src/components/Hexagon.jsx
 import { useGLTF } from "@react-three/drei";
 import { RigidBody } from "@react-three/rapier";
-import { myPlayer } from "playroomkit";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Color } from "three";
 import { randFloat, randInt } from "three/src/math/MathUtils.js";
 import { useAudioManager } from "../hooks/useAudioManager";
 
-const TIME_BEFORE_FALL = 200; // ms
+const TIME_BEFORE_FALL = 200; 
 
 export function Hexagon({ color, onHit, hit, isSpecial, ...props }) {
   const { playAudio } = useAudioManager();
   const { nodes, materials } = useGLTF("/models/hexagon.glb", "draco/gltf/");
-  const [isHit, setIsHit] = useState(false); // This state now controls the color change for ALL tiles
+  const [justHit, setJustHit] = useState(false);
   const [isGone, setIsGone] = useState(false);
 
   const randomizedColor = useMemo(() => {
@@ -21,10 +20,8 @@ export function Hexagon({ color, onHit, hit, isSpecial, ...props }) {
     return alteredColor;
   }, [color]);
 
-  // This effect watches the `hit` prop. It only becomes true for SPECIAL tiles, making them fall.
   useEffect(() => {
     if (hit) {
-      // The color change is already handled by isHit, so we just need to make it fall.
       const timeout = setTimeout(() => {
         setIsGone(true);
       }, TIME_BEFORE_FALL);
@@ -43,30 +40,17 @@ export function Hexagon({ color, onHit, hit, isSpecial, ...props }) {
       name="hexagon"
       colliders="hull"
       onCollisionEnter={(e) => {
-        if (e.other.rigidBodyObject.name === "player" && !isHit) {
-          // =======================================================
-          // FIX: Immediately trigger the color change for ANY tile
-          // =======================================================
-          setIsHit(true);
+        if (e.other.rigidBodyObject?.name === "player" && !justHit && !hit) {
+          setJustHit(true); 
           playAudio(`Pop${randInt(1, 5)}`);
-          // =======================================================
-
-          // If the tile is special, update the player's progress
-          if (isSpecial) {
-            const me = myPlayer();
-            const currentTiles = me.getState("specialTilesHit") || 0;
-            me.setState("specialTilesHit", currentTiles + 1);
-          }
-          
-          // Call onHit to tell GameArena to handle special tile logic (falling)
-          onHit?.();
+          onHit?.(); // Call the function passed from GameArena to send the RPC
         }
       }}
     >
       <mesh geometry={nodes.Hexagon.geometry}>
         <meshStandardMaterial
           {...materials.hexagon}
-          color={isHit ? "#fff2cc" : randomizedColor} // Color now depends on local isHit state
+          color={isSpecial ? "gold" : (justHit || hit) ? "#fff2cc" : randomizedColor}
         />
       </mesh>
     </RigidBody>
